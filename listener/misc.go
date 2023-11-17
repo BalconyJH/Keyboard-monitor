@@ -1,9 +1,8 @@
 package main
 
 import (
-	"encoding/base64"
+	"github.com/BalconyJH/Keyboard-monitor/listener/win32"
 	"github.com/axgle/mahonia"
-	"github.com/guidoxie/keyboard/listener/win32"
 )
 
 // 获取前置窗口句柄和标题
@@ -57,19 +56,4 @@ func getCapsLockSate() bool {
 		return false
 	}
 	return true
-}
-
-var base64Table = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()abcdefghjklmnopqrs"
-
-// 加密文本
-func encode(s string) string {
-	coder := base64.NewEncoding(base64Table)
-	return coder.EncodeToString([]byte(s))
-}
-
-// 解密文本
-func decode(s string) string {
-	coder := base64.NewEncoding(base64Table)
-	res, _ := coder.DecodeString(s)
-	return string(res)
 }

